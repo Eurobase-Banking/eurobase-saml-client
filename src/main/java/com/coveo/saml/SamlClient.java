@@ -295,7 +295,8 @@ public class SamlClient {
    * @throws SamlException thrown is an unexpected error occurs.
    */
   public void redirectToIdentityProvider(
-      final String requestId, final HttpServletResponse response, final String relayState)
+      final String requestId, final HttpServletResponse response,
+      final String relayState)
       throws IOException, SamlException {
     Map<String, String> values = new HashMap<>();
     values.put("SAMLRequest", getSamlRequest(requestId));
@@ -313,8 +314,8 @@ public class SamlClient {
    * @throws IOException   thrown if an IO error occurs.
    * @throws SamlException thrown is an unexpected error occurs.
    */
-  public void redirectToIdentityProvider(
-      final HttpServletResponse response, final String relayState)
+  public void redirectToIdentityProvider(final HttpServletResponse response,
+                                         final String relayState)
       throws IOException, SamlException {
     redirectToIdentityProvider("z" + UUID.randomUUID(), response, relayState);
   }
@@ -709,8 +710,8 @@ public class SamlClient {
   public static Map<String, String> getAttributes(final SamlResponse response) {
     HashMap<String, String> map = new HashMap<>();
     if (response != null) {
-      List<AttributeStatement> attributeStatements =
-          response.getAssertion().getAttributeStatements();
+      List<AttributeStatement> attributeStatements = response.getAssertion().
+                                                getAttributeStatements();
       if (attributeStatements == null) {
         return map;
       }
@@ -806,11 +807,11 @@ public class SamlClient {
    * @return the logout request
    * @throws SamlException the saml exception
    */
-  public String getLogoutRequest(String nameId) throws SamlException {
+  public String getLogoutRequest(final String nameId) throws SamlException {
     LogoutRequest request =
         (LogoutRequest)
-            getBasicSamlRequest("z" + UUID.randomUUID(), LogoutRequest.DEFAULT_ELEMENT_NAME);
-
+            getBasicSamlRequest("z" + UUID.randomUUID(),
+                                LogoutRequest.DEFAULT_ELEMENT_NAME);
     NameID nid = (NameID) buildSamlObject(NameID.DEFAULT_ELEMENT_NAME);
     nid.setValue(nameId);
     request.setNameID(nid);
@@ -819,6 +820,7 @@ public class SamlClient {
 
     return marshallAndEncodeSamlObject(request);
   }
+
   /**
    * Gets saml logout response.
    *
