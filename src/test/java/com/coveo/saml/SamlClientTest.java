@@ -1,9 +1,9 @@
 package com.coveo.saml;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.apache.commons.codec.binary.Base64;
+import org.junit.Test;
+import org.opensaml.saml.saml2.core.StatusCode;
+import org.opensaml.xmlsec.signature.Signature;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -18,11 +18,12 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.UUID;
 
-import org.apache.commons.codec.binary.Base64;
-import org.junit.Test;
-import org.opensaml.saml.saml2.core.StatusCode;
-import org.opensaml.xmlsec.signature.Signature;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class SamlClientTest {
   private static final Instant ASSERTION_DATE =
@@ -112,7 +113,9 @@ public class SamlClientTest {
         SamlClient.fromMetadata(
             "myidentifier", "http://some/url", getXml("adfs.xml"), SamlClient.SamlIdpBinding.POST);
     String decoded =
-        new String(Base64.decodeBase64(client.getSamlRequest()), StandardCharsets.UTF_8);
+        new String(
+            Base64.decodeBase64(client.getSamlRequest("z" + UUID.randomUUID())),
+            StandardCharsets.UTF_8);
     assertTrue(decoded.contains(">myidentifier<"));
   }
 
@@ -205,7 +208,9 @@ public class SamlClientTest {
             getXml("adfs.xml"),
             SamlClient.SamlIdpBinding.Redirect);
     String decoded =
-        new String(Base64.decodeBase64(client.getSamlRequest()), StandardCharsets.UTF_8);
+        new String(
+            Base64.decodeBase64(client.getSamlRequest("z" + UUID.randomUUID())),
+            StandardCharsets.UTF_8);
     assertTrue(decoded.contains(">myidentifier<"));
   }
 

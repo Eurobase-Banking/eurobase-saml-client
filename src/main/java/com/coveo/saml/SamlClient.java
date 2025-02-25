@@ -1,38 +1,10 @@
 package com.coveo.saml;
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.RandomAccessFile;
-import java.io.Reader;
-import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
-import java.security.PrivateKey;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.zip.Inflater;
-import java.util.zip.InflaterInputStream;
-
-import javax.xml.namespace.QName;
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import net.shibboleth.utilities.java.support.component.ComponentInitializationException;
+import net.shibboleth.utilities.java.support.xml.BasicParserPool;
+import net.shibboleth.utilities.java.support.xml.XMLParserException;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.BOMInputStream;
@@ -95,9 +67,35 @@ import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-import net.shibboleth.utilities.java.support.component.ComponentInitializationException;
-import net.shibboleth.utilities.java.support.xml.BasicParserPool;
-import net.shibboleth.utilities.java.support.xml.XMLParserException;
+import javax.xml.namespace.QName;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.RandomAccessFile;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
 
 public class SamlClient {
   private static final Logger logger = LoggerFactory.getLogger(SamlClient.class);
@@ -290,21 +288,35 @@ public class SamlClient {
 
   /**
    * Redirects an {@link HttpServletResponse} to the configured identity provider.
+   * @param requestId saml request id
+   * @param response   The {@link HttpServletResponse}.
+   * @param relayState Optional relay state that will be passed along.
+   * @throws IOException   thrown if an IO error occurs.
+   * @throws SamlException thrown is an unexpected error occurs.
+   */
+  public void redirectToIdentityProvider(
+      final String requestId, final HttpServletResponse response, final String relayState)
+      throws IOException, SamlException {
+    Map<String, String> values = new HashMap<>();
+    values.put("SAMLRequest", getSamlRequest(requestId));
+    if (relayState != null) {
+      values.put("RelayState", relayState);
+    }
+    BrowserUtils.postUsingBrowser(identityProviderUrl, response, values);
+  }
+
+  /**
+   * Redirects an {@link HttpServletResponse} to the configured identity provider.
    *
    * @param response   The {@link HttpServletResponse}.
    * @param relayState Optional relay state that will be passed along.
    * @throws IOException   thrown if an IO error occurs.
    * @throws SamlException thrown is an unexpected error occurs.
    */
-  public void redirectToIdentityProvider(HttpServletResponse response, String relayState)
+  public void redirectToIdentityProvider(
+      final HttpServletResponse response, final String relayState)
       throws IOException, SamlException {
-    Map<String, String> values = new HashMap<>();
-    values.put("SAMLRequest", getSamlRequest());
-    if (relayState != null) {
-      values.put("RelayState", relayState);
-    }
-
-    BrowserUtils.postUsingBrowser(identityProviderUrl, response, values);
+    redirectToIdentityProvider("z" + UUID.randomUUID(), response, relayState);
   }
 
   /**
@@ -694,23 +706,33 @@ public class SamlClient {
    * @param response the response
    * @return the attributes
    */
-  public static Map<String, String> getAttributes(SamlResponse response) {
+  public static Map<String, String> getAttributes(final SamlResponse response) {
     HashMap<String, String> map = new HashMap<>();
-    if (response == null) {
-      return map;
-    }
-    List<AttributeStatement> attributeStatements = response.getAssertion().getAttributeStatements();
-    if (attributeStatements == null) {
-      return map;
-    }
-
-    for (AttributeStatement statement : attributeStatements) {
-      for (Attribute attribute : statement.getAttributes()) {
-        XMLObject xmlObject = attribute.getAttributeValues().get(0);
-        if (xmlObject instanceof XSStringImpl) {
-          map.put(attribute.getName(), ((XSStringImpl) xmlObject).getValue());
-        } else {
-          map.put(attribute.getName(), ((XSAnyImpl) xmlObject).getTextContent());
+    if (response != null) {
+      List<AttributeStatement> attributeStatements =
+          response.getAssertion().getAttributeStatements();
+      if (attributeStatements == null) {
+        return map;
+      }
+      for (AttributeStatement statement : attributeStatements) {
+        for (Attribute attribute : statement.getAttributes()) {
+          List<XMLObject> values = attribute.getAttributeValues();
+          StringBuilder sb = new StringBuilder();
+          int numValues = values == null ? 0 : values.size();
+          String comma = "";
+          for (int i = 0; i < numValues; i++) {
+            XMLObject xmlObject = attribute.getAttributeValues().get(i);
+            sb.append(comma);
+            comma = ",";
+            if (xmlObject instanceof XSStringImpl) {
+              sb.append(((XSStringImpl) xmlObject).getValue());
+            } else {
+              sb.append(((XSAnyImpl) xmlObject).getTextContent());
+            }
+          }
+          if (numValues > 0) {
+            map.put(attribute.getName(), sb.toString());
+          }
         }
       }
     }
@@ -721,9 +743,9 @@ public class SamlClient {
    *
    * @param defaultElementName The SomeClass.DEFAULT_ELEMENT_NAME we'll be casting this object into
    * */
-  private RequestAbstractType getBasicSamlRequest(QName defaultElementName) {
+  private RequestAbstractType getBasicSamlRequest(final String id, QName defaultElementName) {
     RequestAbstractType request = (RequestAbstractType) buildSamlObject(defaultElementName);
-    request.setID("z" + UUID.randomUUID()); // ADFS needs IDs to start with a letter
+    request.setID(id); // ADFS needs IDs to start with a letter
 
     request.setVersion(SAMLVersion.VERSION_20);
     request.setIssueInstant(Instant.now());
@@ -759,8 +781,9 @@ public class SamlClient {
    * @return The base-64 encoded SAML request.
    * @throws SamlException thrown if an unexpected error occurs.
    */
-  public String getSamlRequest() throws SamlException {
-    AuthnRequest request = (AuthnRequest) getBasicSamlRequest(AuthnRequest.DEFAULT_ELEMENT_NAME);
+  public String getSamlRequest(final String requestId) throws SamlException {
+    AuthnRequest request =
+        (AuthnRequest) getBasicSamlRequest(requestId, AuthnRequest.DEFAULT_ELEMENT_NAME);
 
     request.setProtocolBinding(
         "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-" + this.samlBinding.toString());
@@ -784,7 +807,9 @@ public class SamlClient {
    * @throws SamlException the saml exception
    */
   public String getLogoutRequest(String nameId) throws SamlException {
-    LogoutRequest request = (LogoutRequest) getBasicSamlRequest(LogoutRequest.DEFAULT_ELEMENT_NAME);
+    LogoutRequest request =
+        (LogoutRequest)
+            getBasicSamlRequest("z" + UUID.randomUUID(), LogoutRequest.DEFAULT_ELEMENT_NAME);
 
     NameID nid = (NameID) buildSamlObject(NameID.DEFAULT_ELEMENT_NAME);
     nid.setValue(nameId);
